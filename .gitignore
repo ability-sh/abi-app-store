@@ -15,3 +15,5 @@
 # vendor/
 
 *.sum
+
+config.yaml
