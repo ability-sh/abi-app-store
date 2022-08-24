@@ -1,0 +1,26 @@
+
+name: abi-app-store
+alias: /store
+
+services:
+  abi-app-store:
+    type: abi-app-store
+    collection: store/
+    db: abi-db
+    prefix: store_
+    user-svc: http://127.0.0.1:8084/user
+    mq-topic: store
+  abi-db:
+    type: abi-db
+    addr: 127.0.0.1:8082
+  redis:
+    type: redis
+    addr: 127.0.0.1:6379
+    pool-size: 200
+  smtp:
+    type: smtp
+    from: 
+    user:
+    password:
+    host:
+    port:

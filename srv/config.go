@@ -1,38 +1,40 @@
 package srv
 
 import (
-	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ability-sh/abi-lib/dynamic"
 	"github.com/ability-sh/abi-micro/micro"
-	"github.com/ability-sh/abi-micro/mongodb"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"github.com/google/uuid"
 )
 
 const (
-	SERVICE_CONFIG = "uv-app-store"
+	SERVICE_CONFIG = "abi-app-store"
 )
 
 type ConfigService struct {
 	name   string
 	config interface{}
 
-	allows []string
-
-	Prefix       string `json:"prefix"`
-	Db           string `json:"db"`
-	CodeLength   int    `json:"codeLength"`
-	CodeExpires  int    `json:"codeEpxires"`
-	TokenExpires int    `json:"tokenEpxires"`
-	UpExpires    int    `json:"upExpires"` // 上传超时秒数
-	Allow        string `json:"allow"`
+	Db             string `json:"db"`
+	Collection     string `json:"collection"`
+	Prefix         string `json:"prefix"`
+	CodeLength     int    `json:"code-length"`
+	EmailSubject   string `json:"email-subject"`
+	EmailBody      string `json:"email-body"`
+	EmailBodyType  string `json:"email-body-type"`
+	EmailExpires   int    `json:"email-expires"`    //邮件超时时间(秒)
+	EmailReExpires int    `json:"email-re-expires"` //重发邮件间隔时间(秒)
+	TokenExpires   int    `json:"token-expires"`
+	UserSvc        string `json:"user-svc"`
+	CacheExpires   int    `json:"cache-expires"`
 }
 
 func newConfigService(name string, config interface{}) *ConfigService {
@@ -62,62 +64,37 @@ func (s *ConfigService) OnInit(ctx micro.Context) error {
 
 	rand.Seed(time.Now().UnixNano())
 
-	if s.CodeLength == 0 {
-		s.CodeLength = 4
+	if s.CodeLength <= 0 {
+		s.CodeLength = 6
 	}
 
-	if s.Allow == "" {
-		s.allows = []string{"*"}
-	} else {
-		s.allows = strings.Split(s.Allow, ",")
+	if s.EmailSubject == "" {
+		s.EmailSubject = "${code} is your captcha code"
 	}
 
-	ctx.Printf("db init ...")
-
-	db, err := mongodb.GetDB(ctx, SERVICE_MONGODB)
-
-	if err != nil {
-		return err
+	if s.EmailBody == "" {
+		s.EmailBody = "${code} is your captcha code"
 	}
 
-	c := context.Background()
-
-	db_my_app := db.Collection(fmt.Sprintf("%smy_app", s.Prefix))
-	db_app_member := db.Collection(fmt.Sprintf("%sapp_member", s.Prefix))
-
-	{
-		indexes := db_my_app.Indexes()
-		_, err = indexes.CreateMany(c, []mongo.IndexModel{
-			{
-				Keys: bson.D{bson.E{"ctime", -1}},
-			},
-			{
-				Keys:    bson.D{bson.E{"appid", -1}, bson.E{"uid", -1}},
-				Options: options.Index().SetUnique(true),
-			},
-		})
-		if err != nil {
-			return err
-		}
+	if s.EmailBodyType == "" {
+		s.EmailBodyType = "text/plain"
 	}
 
-	{
-		indexes := db_app_member.Indexes()
-		_, err = indexes.CreateMany(c, []mongo.IndexModel{
-			{
-				Keys:    bson.D{bson.E{"appid", -1}, bson.E{"uid", -1}},
-				Options: options.Index().SetUnique(true),
-			},
-			{
-				Keys: bson.D{bson.E{"ctime", -1}},
-			},
-		})
-		if err != nil {
-			return err
-		}
+	if s.EmailExpires <= 0 {
+		s.EmailExpires = 300
 	}
 
-	ctx.Printf("db init done")
+	if s.EmailReExpires <= 0 {
+		s.EmailReExpires = 60
+	}
+
+	if s.TokenExpires <= 0 {
+		s.TokenExpires = 30 * 24 * 3600
+	}
+
+	if s.CacheExpires <= 0 {
+		s.CacheExpires = 300
+	}
 
 	return nil
 }
@@ -133,30 +110,57 @@ func (s *ConfigService) Recycle() {
 
 }
 
-func (s *ConfigService) NewCode() string {
-	v := strconv.FormatInt(rand.Int63(), 36)
-	for len(v) < s.CodeLength {
-		v = strings.Repeat(v, s.CodeLength)
-	}
-	return v[0:s.CodeLength]
+func (s *ConfigService) NewID(ctx micro.Context) string {
+	return strconv.FormatInt(ctx.Runtime().NewID(), 36)
+}
+
+func (s *ConfigService) NewSecret() string {
+	return strings.ReplaceAll(uuid.New().String(), "-", "")
 }
 
 func (s *ConfigService) NewToken() string {
-	return micro.NewTrace()
+	return strings.ReplaceAll(uuid.New().String(), "-", "")
 }
 
-func (s *ConfigService) IsAllow(email string) bool {
+func (s *ConfigService) NewCode() string {
 
-	for _, v := range s.allows {
-		if v == "*" {
-			return true
-		}
-		if strings.HasSuffix(email, v) {
-			return true
-		}
+	ss := strconv.Itoa(rand.Int())
+
+	for len(ss) < s.CodeLength {
+		ss = ss + strconv.Itoa(rand.Int())
 	}
 
-	return false
+	return ss[0:s.CodeLength]
+}
+
+func (s *ConfigService) Sign(secret string, data map[string]interface{}) string {
+
+	m := md5.New()
+
+	keys := []string{}
+
+	for key, _ := range data {
+		keys = append(keys, key)
+	}
+
+	sort.Strings(keys)
+
+	op_and := []byte("&")
+	op_eq := []byte("=")
+
+	for i, key := range keys {
+		if i != 0 {
+			m.Write(op_and)
+		}
+		m.Write([]byte(key))
+		m.Write(op_eq)
+		m.Write([]byte(dynamic.StringValue(data[key], "")))
+	}
+
+	m.Write(op_and)
+	m.Write([]byte(secret))
+
+	return hex.EncodeToString(m.Sum(nil))
 }
 
 func GetConfigService(ctx micro.Context, name string) (*ConfigService, error) {
@@ -172,7 +176,7 @@ func GetConfigService(ctx micro.Context, name string) (*ConfigService, error) {
 }
 
 func init() {
-	micro.Reg("uv-app-store", func(name string, config interface{}) (micro.Service, error) {
+	micro.Reg(SERVICE_CONFIG, func(name string, config interface{}) (micro.Service, error) {
 		return newConfigService(name, config), nil
 	})
 }

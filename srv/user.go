@@ -3,23 +3,89 @@ package srv
 import (
 	"fmt"
 	"regexp"
-	"strings"
 	"time"
 
-	"github.com/ability-sh/abi-ac/ac"
-	pb_user "github.com/ability-sh/abi-micro-user/pb"
-	"github.com/ability-sh/abi-micro/grpc"
+	"github.com/ability-sh/abi-lib/dynamic"
+	"github.com/ability-sh/abi-lib/errors"
+	"github.com/ability-sh/abi-lib/eval"
+	"github.com/ability-sh/abi-micro/http"
 	"github.com/ability-sh/abi-micro/micro"
 	"github.com/ability-sh/abi-micro/redis"
 	"github.com/ability-sh/abi-micro/smtp"
 )
 
-var reg_email, _ = regexp.Compile(`^[a-zA-Z0-9\.\-\_]+@[a-zA-Z0-9\.\-\_]+$`)
+var re_email, _ = regexp.Compile(`^[a-zA-Z\.\-\_0-9]+@[a-zA-Z0-9\-\.]+$`)
 
-func (s *Server) LoginCode(ctx micro.Context, task *LoginCodeTask) (*LoginCodeResult, error) {
+func (s *Server) getUid(ctx micro.Context, token string) (string, error) {
 
-	if !reg_email.MatchString(task.Email) {
-		return nil, ac.Errorf(ERRNO_INPUT_DATA, "email error")
+	if token == "" {
+		return "", errors.Errorf(ERRNO_LOGIN, "Retry after logging in")
+	}
+
+	config, err := GetConfigService(ctx, SERVICE_CONFIG)
+
+	if err != nil {
+		return "", err
+	}
+
+	redis, err := redis.GetRedis(ctx, SERVICE_REDIS)
+
+	if err != nil {
+		return "", err
+	}
+
+	id, err := redis.Get(fmt.Sprintf("%st_", config.Prefix, token))
+
+	if err != nil || id == "" {
+		return "", errors.Errorf(ERRNO_LOGIN, "Retry after logging in")
+	}
+
+	return id, nil
+}
+
+func (s *Server) getUser(ctx micro.Context, email string) (*User, error) {
+
+	config, err := GetConfigService(ctx, SERVICE_CONFIG)
+
+	if err != nil {
+		return nil, err
+	}
+
+	HTTP, err := http.GetHTTPService(ctx, SERVICE_HTTP)
+
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := HTTP.Request(ctx, "GET").
+		SetURL(fmt.Sprintf("%s/get.json", config.UserSvc), map[string]string{"name": email}).
+		Send()
+
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := res.PraseBody()
+
+	if err != nil {
+		return nil, err
+	}
+
+	errno := dynamic.IntValue(dynamic.Get(data, "errno"), 0)
+
+	if errno != 200 {
+		return nil, errors.Errorf(int32(errno), dynamic.StringValue(dynamic.Get(data, "errmsg"), "Internal service error"))
+	}
+
+	uid := dynamic.StringValue(dynamic.GetWithKeys(data, []string{"data", "id"}), "")
+
+	return &User{Email: email, Id: uid}, nil
+}
+
+func (s *Server) MailSend(ctx micro.Context, task *SendMailTask) (interface{}, error) {
+
+	if !re_email.MatchString(task.Email) {
+		return nil, errors.Errorf(ERRNO_INPUT_DATA, "The parameter email is incorrect")
 	}
 
 	config, err := GetConfigService(ctx, SERVICE_CONFIG)
@@ -28,55 +94,65 @@ func (s *Server) LoginCode(ctx micro.Context, task *LoginCodeTask) (*LoginCodeRe
 		return nil, err
 	}
 
-	if !config.IsAllow(task.Email) {
-		return nil, ac.Errorf(ERRNO_INPUT_DATA, "not support email")
-	}
-
-	cache, err := redis.GetRedis(ctx, SERVICE_REDIS)
+	redis, err := redis.GetRedis(ctx, SERVICE_REDIS)
 
 	if err != nil {
 		return nil, err
 	}
 
-	sm, err := smtp.GetSMTPService(ctx, SERVICE_SMTP)
+	key_sr := fmt.Sprintf("%ssr_", config.Prefix, task.Email)
+	key_s := fmt.Sprintf("%ss_", config.Prefix, task.Email)
 
-	if err != nil {
-		return nil, err
-	}
-
-	k := fmt.Sprintf("%slogin_code_%s", config.Prefix, task.Email)
-
-	_, err = cache.Get(k)
+	_, err = redis.Get(key_sr)
 
 	if err == nil {
-		return nil, ac.Errorf(ERRNO_LOGIN_CODE, "Too many requests, please try again later")
+		return nil, errors.Errorf(ERRNO_AGAIN, "The operation is too frequent, try again later")
+	}
+
+	mail, err := smtp.GetSMTPService(ctx, SERVICE_SMTP)
+
+	if err != nil {
+		return nil, err
 	}
 
 	code := config.NewCode()
 
-	err = sm.Send([]string{task.Email}, "验证码", strings.ToUpper(code), "text/plain")
+	getValue := func(key string) string {
+		if key == "code" {
+			return code
+		}
+		return ""
+	}
+
+	err = mail.Send([]string{task.Email}, eval.ParseEval(config.EmailSubject, getValue), eval.ParseEval(config.EmailBody, getValue), config.EmailBodyType)
 
 	if err != nil {
 		return nil, err
 	}
 
-	err = cache.Set(k, code, time.Second*time.Duration(config.CodeExpires))
+	err = redis.Set(key_sr, code, time.Duration(config.EmailReExpires)*time.Second)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &LoginCodeResult{}, nil
+	redis.Set(key_s, code, time.Duration(config.EmailExpires)*time.Second)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return nil, nil
 }
 
 func (s *Server) Login(ctx micro.Context, task *LoginTask) (*LoginResult, error) {
 
-	if !reg_email.MatchString(task.Email) {
-		return nil, ac.Errorf(ERRNO_INPUT_DATA, "email error")
+	if !re_email.MatchString(task.Email) {
+		return nil, errors.Errorf(ERRNO_INPUT_DATA, "The parameter email is incorrect")
 	}
 
 	if task.Code == "" {
-		return nil, ac.Errorf(ERRNO_INPUT_DATA, "code error")
+		return nil, errors.Errorf(ERRNO_INPUT_DATA, "The parameter code is incorrect")
 	}
 
 	config, err := GetConfigService(ctx, SERVICE_CONFIG)
@@ -85,179 +161,70 @@ func (s *Server) Login(ctx micro.Context, task *LoginTask) (*LoginResult, error)
 		return nil, err
 	}
 
-	if !config.IsAllow(task.Email) {
-		return nil, ac.Errorf(ERRNO_INPUT_DATA, "not support email")
-	}
-
-	cache, err := redis.GetRedis(ctx, SERVICE_REDIS)
+	redis, err := redis.GetRedis(ctx, SERVICE_REDIS)
 
 	if err != nil {
 		return nil, err
 	}
 
-	k := fmt.Sprintf("%slogin_code_%s", config.Prefix, task.Email)
+	key_sr := fmt.Sprintf("%ssr_", config.Prefix, task.Email)
+	key_s := fmt.Sprintf("%ss_", config.Prefix, task.Email)
 
-	code, err := cache.Get(k)
+	code, err := redis.Get(key_s)
 
-	if err != nil {
-		if redis.IsNil(err) {
-			return nil, ac.Errorf(ERRNO_404, "not found code")
-		}
-		return nil, err
+	if err != nil || code == "" || code != task.Code {
+		return nil, errors.Errorf(ERRNO_AGAIN, "wrong captcha")
 	}
 
-	if strings.ToLower(task.Code) != code {
-		return nil, ac.Errorf(ERRNO_LOGIN_CODE, "code error")
-	}
-
-	err = cache.Del(k)
+	HTTP, err := http.GetHTTPService(ctx, SERVICE_HTTP)
 
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := grpc.GetConn(ctx, SERVICE_USER)
+	res, err := HTTP.Request(ctx, "GET").
+		SetURL(fmt.Sprintf("%s/get.json", config.UserSvc), map[string]string{"name": task.Email, "autocreate": "true"}).
+		Send()
 
 	if err != nil {
 		return nil, err
 	}
 
-	cli := pb_user.NewServiceClient(conn)
-
-	c := grpc.NewGRPCContext(ctx)
-
-	rs, err := cli.UserGet(c, &pb_user.UserGetTask{Name: task.Email, AutoCreated: true})
+	data, err := res.PraseBody()
 
 	if err != nil {
 		return nil, err
 	}
 
-	if rs.Errno != ERRNO_OK {
-		return nil, ac.Errorf(int(rs.Errno), rs.Errmsg)
+	errno := dynamic.IntValue(dynamic.Get(data, "errno"), 0)
+
+	if errno != 200 {
+		return nil, errors.Errorf(int32(errno), dynamic.StringValue(dynamic.Get(data, "errmsg"), "Internal service error"))
 	}
+
+	uid := dynamic.StringValue(dynamic.GetWithKeys(data, []string{"data", "id"}), "")
+
+	u := &User{Email: task.Email, Id: uid}
 
 	token := config.NewToken()
 
-	k = fmt.Sprintf("%stoken_%s", config.Prefix, token)
-
-	err = cache.Set(k, rs.Data.Id, time.Duration(config.TokenExpires)*time.Second)
+	err = redis.Set(fmt.Sprintf("%st_", config.Prefix, token), uid, time.Duration(config.TokenExpires)*time.Second)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &LoginResult{User: &User{Id: rs.Data.Id, Email: rs.Data.Name}, Token: token}, nil
-}
-
-func (s *Server) Logout(ctx micro.Context, task *LogoutTask) (*LogoutResult, error) {
-
-	if task.Token == "" {
-		return nil, ac.Errorf(ERRNO_INPUT_DATA, "token error")
-	}
-
-	config, err := GetConfigService(ctx, SERVICE_CONFIG)
+	err = redis.Del(key_s)
 
 	if err != nil {
 		return nil, err
 	}
 
-	cache, err := redis.GetRedis(ctx, SERVICE_REDIS)
+	err = redis.Del(key_sr)
 
 	if err != nil {
 		return nil, err
 	}
 
-	k := fmt.Sprintf("%stoken_%s", config.Prefix, task.Token)
-
-	err = cache.Del(k)
-
-	if err != nil && !redis.IsNil(err) {
-		return nil, err
-	}
-
-	return &LogoutResult{}, nil
-}
-
-func (s *Server) Uid(ctx micro.Context, token string) (string, error) {
-
-	if token == "" {
-		return "", ac.Errorf(ERRNO_INPUT_DATA, "token error")
-	}
-
-	config, err := GetConfigService(ctx, SERVICE_CONFIG)
-
-	if err != nil {
-		return "", err
-	}
-
-	cache, err := redis.GetRedis(ctx, SERVICE_REDIS)
-
-	if err != nil {
-		return "", err
-	}
-
-	k := fmt.Sprintf("%stoken_%s", config.Prefix, token)
-
-	uid, err := cache.Get(k)
-
-	if err != nil {
-		if redis.IsNil(err) {
-			return "", ac.Errorf(ERRNO_NOT_LOGIN, "not login")
-		}
-		return "", err
-	}
-
-	return uid, nil
-}
-
-func (s *Server) UserGet(ctx micro.Context, task *UserGetTask) (*User, error) {
-
-	if task.Token == "" {
-		return nil, ac.Errorf(ERRNO_INPUT_DATA, "token error")
-	}
-
-	config, err := GetConfigService(ctx, SERVICE_CONFIG)
-
-	if err != nil {
-		return nil, err
-	}
-
-	cache, err := redis.GetRedis(ctx, SERVICE_REDIS)
-
-	if err != nil {
-		return nil, err
-	}
-
-	k := fmt.Sprintf("%stoken_%s", config.Prefix, task.Token)
-
-	uid, err := cache.Get(k)
-
-	if err != nil {
-		if redis.IsNil(err) {
-			return nil, ac.Errorf(ERRNO_NOT_LOGIN, "not login")
-		}
-		return nil, err
-	}
-
-	conn, err := grpc.GetConn(ctx, SERVICE_USER)
-
-	if err != nil {
-		return nil, err
-	}
-
-	cli := pb_user.NewServiceClient(conn)
-
-	c := grpc.NewGRPCContext(ctx)
-
-	rs, err := cli.UserGet(c, &pb_user.UserGetTask{Uid: uid})
-
-	if err != nil {
-		return nil, err
-	}
-
-	if rs.Errno != ERRNO_OK {
-		return nil, ac.Errorf(int(rs.Errno), rs.Errmsg)
-	}
-
-	return &User{Id: rs.Data.Id, Email: rs.Data.Name}, nil
+	return &LoginResult{Token: token, User: u}, nil
 }
