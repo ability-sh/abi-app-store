@@ -26,3 +26,12 @@ services:
     port:
   http:
     type: http
+  oss:
+    type: oss
+    dirver: aws
+    region: ap-northeast-1
+    bucket: app-ability-sh
+    accessKey:
+    secretKey:
+    baseURL: https://app.ability.sh
+
