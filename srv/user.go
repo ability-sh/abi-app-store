@@ -236,3 +236,48 @@ func (s *Server) Login(ctx micro.Context, task *LoginTask) (*LoginResult, error)
 
 	return &LoginResult{Token: token, User: u}, nil
 }
+
+func (s *Server) UserGet(ctx micro.Context, task *UserGetTask) (*User, error) {
+
+	uid, err := s.getUid(ctx, task.Token)
+
+	if err != nil {
+		return nil, err
+	}
+
+	config, err := GetConfigService(ctx, SERVICE_CONFIG)
+
+	if err != nil {
+		return nil, err
+	}
+
+	HTTP, err := http.GetHTTPService(ctx, SERVICE_HTTP)
+
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := HTTP.Request(ctx, "GET").
+		SetURL(fmt.Sprintf("%s/get.json", config.UserSvc), map[string]string{"id": uid}).
+		Send()
+
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := res.PraseBody()
+
+	if err != nil {
+		return nil, err
+	}
+
+	errno := dynamic.IntValue(dynamic.Get(data, "errno"), 0)
+
+	if errno != 200 {
+		return nil, errors.Errorf(int32(errno), dynamic.StringValue(dynamic.Get(data, "errmsg"), "Internal service error"))
+	}
+
+	name := dynamic.StringValue(dynamic.GetWithKeys(data, []string{"data", "name"}), "")
+
+	return &User{Email: name, Id: uid}, nil
+}

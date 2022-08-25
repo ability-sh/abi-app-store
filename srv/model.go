@@ -25,6 +25,10 @@ type LoginResult struct {
 	User  *User  `json:"user"`
 }
 
+type UserGetTask struct {
+	Token string `json:"token"`
+}
+
 type Container struct {
 	Id     string      `json:"id"`
 	Info   interface{} `json:"info,omitempty"`
