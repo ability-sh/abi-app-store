@@ -52,12 +52,12 @@ type ContainerGetTask struct {
 type ContainerInfoGetTask struct {
 	Sign      string `json:"sign"`
 	Id        string `json:"id"`
-	Timestamp int    `json:"timestamp"`
+	Timestamp int64  `json:"timestamp"`
 	Ver       int    `json:"ver"`
 }
 
 type ContainerInfoGetResult struct {
-	Info interface{} `json:"info"`
+	Info interface{} `json:"info,omitempty"`
 	Ver  int         `json:"ver"`
 }
 

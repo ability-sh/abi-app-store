@@ -9,7 +9,7 @@ services:
     db: abi-db
     prefix: store_
     user-svc: http://127.0.0.1:8084/user
-    mq-topic: store
+    email-enabled: false
   abi-db:
     type: abi-db
     addr: 127.0.0.1:8082
@@ -24,3 +24,5 @@ services:
     password:
     host:
     port:
+  http:
+    type: http

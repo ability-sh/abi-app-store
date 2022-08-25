@@ -32,6 +32,7 @@ type ConfigService struct {
 	EmailBodyType  string `json:"email-body-type"`
 	EmailExpires   int    `json:"email-expires"`    //邮件超时时间(秒)
 	EmailReExpires int    `json:"email-re-expires"` //重发邮件间隔时间(秒)
+	EmailEnabled   bool   `json:"email-enabled"`
 	TokenExpires   int    `json:"token-expires"`
 	UserSvc        string `json:"user-svc"`
 	CacheExpires   int    `json:"cache-expires"`

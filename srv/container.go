@@ -275,13 +275,15 @@ func (s *Server) ContainerSet(ctx micro.Context, task *ContainerSetTask) (*Conta
 	collection := client.Collection(config.Collection)
 
 	text, err := collection.Exec(cc, `
-	var id = ${id};
-	var info = ${info};
-	var secret = ${secret};
-	var k_meta = collection + 'container/' + id + '/meta.json';
-	var text = get(k_meta);
-	if(!text) {
-		throw 'container does not exist'
+	(function(){
+		var id = ${id};
+		var info = ${info};
+		var secret = ${secret};
+		var k_meta = collection + 'container/' + id + '/meta.json';
+		var text = get(k_meta);
+		if(!text) {
+			throw 'container does not exist'
+		}
 		var object = JSON.parse(text);
 		if(secret) {
 			object.secret = secret;
@@ -292,8 +294,8 @@ func (s *Server) ContainerSet(ctx micro.Context, task *ContainerSetTask) (*Conta
 		}
 		text = JSON.stringify(object);
 		put(k_meta,text)
-	}
-	return text;
+		return text;
+	})()
 	`, map[string]interface{}{"id": task.Id, "info": task.Info, "secret": secret})
 
 	if err != nil {
@@ -352,6 +354,10 @@ func (s *Server) ContainerInfoGet(ctx micro.Context, task *ContainerInfoGetTask)
 		return nil, errors.Errorf(ERRNO_INPUT_DATA, "The parameter timestamp is incorrect")
 	}
 
+	if task.Sign == "" {
+		return nil, errors.Errorf(ERRNO_INPUT_DATA, "The parameter is is incorrect")
+	}
+
 	config, err := GetConfigService(ctx, SERVICE_CONFIG)
 
 	if err != nil {
@@ -365,6 +371,8 @@ func (s *Server) ContainerInfoGet(ctx micro.Context, task *ContainerInfoGetTask)
 	}
 
 	ss := config.Sign(container.Secret, map[string]interface{}{"id": task.Id, "timestamp": task.Timestamp, "ver": task.Ver})
+
+	ctx.Println("sign", ss)
 
 	if ss != task.Sign {
 		return nil, errors.Errorf(ERRNO_SIGN, "Signature error")

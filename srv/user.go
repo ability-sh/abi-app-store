@@ -34,7 +34,7 @@ func (s *Server) getUid(ctx micro.Context, token string) (string, error) {
 		return "", err
 	}
 
-	id, err := redis.Get(fmt.Sprintf("%st_", config.Prefix, token))
+	id, err := redis.Get(fmt.Sprintf("%st_%s", config.Prefix, token))
 
 	if err != nil || id == "" {
 		return "", errors.Errorf(ERRNO_LOGIN, "Retry after logging in")
@@ -100,8 +100,8 @@ func (s *Server) MailSend(ctx micro.Context, task *SendMailTask) (interface{}, e
 		return nil, err
 	}
 
-	key_sr := fmt.Sprintf("%ssr_", config.Prefix, task.Email)
-	key_s := fmt.Sprintf("%ss_", config.Prefix, task.Email)
+	key_sr := fmt.Sprintf("%ssr_%s", config.Prefix, task.Email)
+	key_s := fmt.Sprintf("%ss_%s", config.Prefix, task.Email)
 
 	_, err = redis.Get(key_sr)
 
@@ -124,10 +124,14 @@ func (s *Server) MailSend(ctx micro.Context, task *SendMailTask) (interface{}, e
 		return ""
 	}
 
-	err = mail.Send([]string{task.Email}, eval.ParseEval(config.EmailSubject, getValue), eval.ParseEval(config.EmailBody, getValue), config.EmailBodyType)
+	if config.EmailEnabled {
 
-	if err != nil {
-		return nil, err
+		err = mail.Send([]string{task.Email}, eval.ParseEval(config.EmailSubject, getValue), eval.ParseEval(config.EmailBody, getValue), config.EmailBodyType)
+
+		if err != nil {
+			return nil, err
+		}
+
 	}
 
 	err = redis.Set(key_sr, code, time.Duration(config.EmailReExpires)*time.Second)
@@ -142,7 +146,11 @@ func (s *Server) MailSend(ctx micro.Context, task *SendMailTask) (interface{}, e
 		return nil, err
 	}
 
-	return nil, nil
+	if config.EmailEnabled {
+		return map[string]interface{}{}, nil
+	}
+
+	return map[string]interface{}{"code": code}, nil
 }
 
 func (s *Server) Login(ctx micro.Context, task *LoginTask) (*LoginResult, error) {
@@ -167,8 +175,8 @@ func (s *Server) Login(ctx micro.Context, task *LoginTask) (*LoginResult, error)
 		return nil, err
 	}
 
-	key_sr := fmt.Sprintf("%ssr_", config.Prefix, task.Email)
-	key_s := fmt.Sprintf("%ss_", config.Prefix, task.Email)
+	key_sr := fmt.Sprintf("%ssr_%s", config.Prefix, task.Email)
+	key_s := fmt.Sprintf("%ss_%s", config.Prefix, task.Email)
 
 	code, err := redis.Get(key_s)
 
@@ -183,7 +191,7 @@ func (s *Server) Login(ctx micro.Context, task *LoginTask) (*LoginResult, error)
 	}
 
 	res, err := HTTP.Request(ctx, "GET").
-		SetURL(fmt.Sprintf("%s/get.json", config.UserSvc), map[string]string{"name": task.Email, "autocreate": "true"}).
+		SetURL(fmt.Sprintf("%s/get.json", config.UserSvc), map[string]string{"name": task.Email, "autoCreated": "true"}).
 		Send()
 
 	if err != nil {
@@ -208,7 +216,7 @@ func (s *Server) Login(ctx micro.Context, task *LoginTask) (*LoginResult, error)
 
 	token := config.NewToken()
 
-	err = redis.Set(fmt.Sprintf("%st_", config.Prefix, token), uid, time.Duration(config.TokenExpires)*time.Second)
+	err = redis.Set(fmt.Sprintf("%st_%s", config.Prefix, token), uid, time.Duration(config.TokenExpires)*time.Second)
 
 	if err != nil {
 		return nil, err
