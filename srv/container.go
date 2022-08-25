@@ -1,14 +1,16 @@
 package srv
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/ability-sh/abi-db/client/service"
+	"github.com/ability-sh/abi-lib/dynamic"
 	"github.com/ability-sh/abi-lib/errors"
+	"github.com/ability-sh/abi-lib/json"
 	"github.com/ability-sh/abi-micro/grpc"
 	"github.com/ability-sh/abi-micro/micro"
+	"github.com/ability-sh/abi-micro/oss"
 	"github.com/ability-sh/abi-micro/redis"
 )
 
@@ -355,7 +357,7 @@ func (s *Server) ContainerInfoGet(ctx micro.Context, task *ContainerInfoGetTask)
 	}
 
 	if task.Sign == "" {
-		return nil, errors.Errorf(ERRNO_INPUT_DATA, "The parameter is is incorrect")
+		return nil, errors.Errorf(ERRNO_INPUT_DATA, "The parameter sign is incorrect")
 	}
 
 	config, err := GetConfigService(ctx, SERVICE_CONFIG)
@@ -468,4 +470,104 @@ func (s *Server) ContainerMemberRemove(ctx micro.Context, task *ContainerMemberA
 	}
 
 	return nil, nil
+}
+
+func (s *Server) ContainerAppGet(ctx micro.Context, task *ContainerAppGetTask) (*ContainerAppGetResult, error) {
+
+	if task.Id == "" {
+		return nil, errors.Errorf(ERRNO_INPUT_DATA, "The parameter id is incorrect")
+	}
+
+	if task.Timestamp == 0 {
+		return nil, errors.Errorf(ERRNO_INPUT_DATA, "The parameter timestamp is incorrect")
+	}
+
+	if task.Sign == "" {
+		return nil, errors.Errorf(ERRNO_INPUT_DATA, "The parameter sign is incorrect")
+	}
+
+	if task.Appid == "" {
+		return nil, errors.Errorf(ERRNO_INPUT_DATA, "The parameter appid is incorrect")
+	}
+
+	if !re_ver.MatchString(task.Ver) {
+		return nil, errors.Errorf(ERRNO_INPUT_DATA, "The parameter ver is incorrect")
+	}
+
+	if task.Ability == "" {
+		return nil, errors.Errorf(ERRNO_INPUT_DATA, "The parameter ability is incorrect")
+	}
+
+	config, err := GetConfigService(ctx, SERVICE_CONFIG)
+
+	if err != nil {
+		return nil, err
+	}
+
+	container, err := s.getContainer(ctx, task.Id)
+
+	if err != nil {
+		return nil, err
+	}
+
+	ss := config.Sign(container.Secret, map[string]interface{}{
+		"id":        task.Id,
+		"timestamp": task.Timestamp,
+		"ver":       task.Ver,
+		"appid":     task.Appid,
+		"ability":   task.Ability,
+	})
+
+	ctx.Println("sign", ss)
+
+	if ss != task.Sign {
+		return nil, errors.Errorf(ERRNO_SIGN, "Signature error")
+	}
+
+	client, err := service.GetClient(ctx, config.Db)
+
+	if err != nil {
+		return nil, err
+	}
+
+	cc := grpc.NewGRPCContext(ctx)
+
+	collection := client.Collection(config.Collection)
+
+	_, err = collection.Get(cc, fmt.Sprintf("app/%s/approve/%s", task.Appid, task.Id))
+
+	if err != nil {
+		if IsErrno(err, ERRNO_NOT_FOUND) {
+			return nil, errors.Errorf(ERRNO_NO_PERMISSION, "No permission")
+		}
+		return nil, err
+	}
+
+	info, err := collection.GetObject(cc, fmt.Sprintf("app/%s/%s/info.json", task.Appid, task.Ver))
+
+	if err != nil {
+		if IsErrno(err, ERRNO_NOT_FOUND) {
+			return nil, errors.Errorf(ERRNO_NOT_FOUND, "App version that doesn't exist")
+		}
+		return nil, err
+	}
+
+	if dynamic.Get(info, task.Ability) == nil {
+		return nil, errors.Errorf(ERRNO_NOT_FOUND, "application package %s that does not exist", task.Ability)
+	}
+
+	sss, err := oss.GetOSS(ctx, SERVICE_OSS)
+
+	if err != nil {
+		return nil, err
+	}
+
+	u, err := sss.GetSignURL(fmt.Sprintf("app/%s/%s/%s.zip", task.Appid, task.Ver, task.Ability), time.Duration(config.AppGetExpires)*time.Second)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &ContainerAppGetResult{Info: info, Url: u}, nil
+
 }

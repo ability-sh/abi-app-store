@@ -11,10 +11,12 @@ const (
 	ERRNO_NO_PERMISSION   = 603
 	ERRNO_SIGN            = 604
 	ERRNO_MEMBER          = 605
+	ERRNO_APP_VER         = 606
 )
 
 const (
 	SERVICE_SMTP  = "smtp"
 	SERVICE_REDIS = "redis"
 	SERVICE_HTTP  = "http"
+	SERVICE_OSS   = "oss"
 )

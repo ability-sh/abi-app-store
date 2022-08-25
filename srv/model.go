@@ -82,3 +82,87 @@ type ContainerMemberRemoveTask struct {
 	Id    string `json:"id"`
 	Email string `json:"email"`
 }
+
+type ContainerAppGetTask struct {
+	Id        string `json:"id"`
+	Appid     string `json:"appid"`
+	Ver       string `json:"ver"`
+	Ability   string `json:"ability"`
+	Sign      string `json:"sign"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+type ContainerAppGetResult struct {
+	Info interface{} `json:"info,omitempty"`
+	Url  string      `json:"url,omitempty"`
+}
+
+type App struct {
+	Id   string      `json:"id"`
+	Info interface{} `json:"info,omitempty"`
+}
+
+type AppCreateTask struct {
+	Token string      `json:"token"`
+	Info  interface{} `json:"info,omitempty"`
+}
+
+type AppGetTask struct {
+	Token string `json:"token"`
+	Id    string `json:"id"`
+}
+
+type AppSetTask struct {
+	Token string      `json:"token"`
+	Id    string      `json:"id"`
+	Info  interface{} `json:"info,omitempty"`
+}
+
+type AppVerUpTask struct {
+	Token   string `json:"token"`
+	Id      string `json:"id"`
+	Ver     string `json:"ver"`
+	Ability string `json:"ability"`
+}
+
+type AppVerUpResult struct {
+	Url string `json:"url"`
+}
+
+type AppVerDoneTask struct {
+	Token string      `json:"token"`
+	Id    string      `json:"id"`
+	Ver   string      `json:"ver"`
+	Info  interface{} `json:"info,omitempty"`
+}
+
+type AppMemberAddTask struct {
+	Token string `json:"token"`
+	Id    string `json:"id"`
+	Email string `json:"email"`
+	Role  string `json:"role"`
+}
+
+type AppMemberRemoveTask struct {
+	Token string `json:"token"`
+	Id    string `json:"id"`
+	Email string `json:"email"`
+}
+
+type AppVerInfoGetTask struct {
+	Token string `json:"token"`
+	Id    string `json:"id"`
+	Ver   string `json:"ver"`
+}
+
+type AppApproveTask struct {
+	Token       string `json:"token"`
+	Id          string `json:"id"`
+	ContainerId string `json:"containerId"`
+}
+
+type AppUnapproveTask struct {
+	Token       string `json:"token"`
+	Id          string `json:"id"`
+	ContainerId string `json:"containerId"`
+}

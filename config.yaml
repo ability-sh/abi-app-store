@@ -28,10 +28,10 @@ services:
     type: http
   oss:
     type: oss
-    dirver: aws
+    driver: aws
     region: ap-northeast-1
     bucket: app-ability-sh
-    accessKey:
-    secretKey:
+    accessKey: 
+    secretKey: 
     baseURL: https://app.ability.sh
 

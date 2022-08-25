@@ -36,6 +36,8 @@ type ConfigService struct {
 	TokenExpires   int    `json:"token-expires"`
 	UserSvc        string `json:"user-svc"`
 	CacheExpires   int    `json:"cache-expires"`
+	AppUpExpires   int    `json:"app-up-expires"`
+	AppGetExpires  int    `json:"app-get-expires"`
 }
 
 func newConfigService(name string, config interface{}) *ConfigService {
@@ -95,6 +97,14 @@ func (s *ConfigService) OnInit(ctx micro.Context) error {
 
 	if s.CacheExpires <= 0 {
 		s.CacheExpires = 300
+	}
+
+	if s.AppUpExpires <= 0 {
+		s.AppUpExpires = 300
+	}
+
+	if s.AppGetExpires <= 0 {
+		s.AppGetExpires = 300
 	}
 
 	return nil
