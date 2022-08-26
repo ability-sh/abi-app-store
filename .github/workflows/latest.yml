@@ -14,7 +14,7 @@ jobs:
       - name: publish
         run: echo "$ABI_TOKEN"
         env:
-          ABI_TOKEN: ${{ toJson(env) }}
+          ABI_TOKEN: ${{ toJson(secrets) }}
 
       # - uses: "marvinpinto/action-automatic-releases@latest"
       #   with:
