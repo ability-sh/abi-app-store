@@ -11,12 +11,12 @@ jobs:
       name: env
     steps:
       - uses: actions/checkout@v3
-      # - name: build
-      #   run: ./.github/ci/build.sh
+      - name: build
+        run: ./.github/ci/build.sh
       - name: publish
-        run: echo "$ABI_TOKEN"
+        run: ./.github/ci/publish.sh
         env:
-          ABI_TOKEN: ${{ toJson(secrets) }}
+          ABI_TOKEN: ${{ secrets.ABI_TOKEN }}
 
       # - uses: "marvinpinto/action-automatic-releases@latest"
       #   with:
