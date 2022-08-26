@@ -13,12 +13,6 @@ jobs:
       - uses: actions/checkout@v3
       - name: build
         run: ./.github/ci/build.sh
-      - name: ability
-        run: |
-          go install github.com/ability-sh/ability@v1.0.0
-          ls /root/go/bin/ability
-          chmod +x /root/go/bin/ability
-          export PATH=$PATH:/root/go/bin
       - name: publish
         run: ./.github/ci/publish.sh
         env:
