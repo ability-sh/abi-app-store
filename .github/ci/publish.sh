@@ -13,5 +13,5 @@ mkdir dist/cloud/bin
 
 mv abi-app-store dist/cloud/bin/$ENV_OS-$ENV_ARCH
 
-$ABILITY app publish -token $ABI_TOKEN -file ./app.yaml
+$ABILITY app publish -token $ABI_TOKEN -file ./app.yaml -number $ABI_NUMBER
 

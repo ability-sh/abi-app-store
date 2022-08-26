@@ -17,6 +17,7 @@ jobs:
         run: ./.github/ci/publish.sh
         env:
           ABI_TOKEN: ${{ secrets.ABI_TOKEN }}
+          ABI_NUMBER: ${{ github.event.id }}
 
       # - uses: "marvinpinto/action-automatic-releases@latest"
       #   with:
