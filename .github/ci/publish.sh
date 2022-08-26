@@ -2,8 +2,6 @@
 
 PWD_DIR=$(pwd)
 
-go install github.com/ability-sh/ability@v1.0.0
-
 ABILITY=./.github/ci/ability
 
 ENV_OS=`$ABILITY env os`
