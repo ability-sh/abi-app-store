@@ -13,5 +13,6 @@ mkdir dist/cloud/bin
 
 mv abi-app-store dist/cloud/bin/$ENV_OS-$ENV_ARCH
 
-$ABILITY app publish -token $ABI_TOKEN -file ./app.yaml -number $GITHUB_JOB
+echo "$ABILITY app publish -token $ABI_TOKEN -file ./app.yaml -number $GITHUB_JOB"
 
+$ABILITY app publish -token $ABI_TOKEN -file ./app.yaml -number $GITHUB_JOB
