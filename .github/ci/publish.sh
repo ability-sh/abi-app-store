@@ -8,6 +8,8 @@ echo $GOPATH
 
 ABILITY=/root/go/bin/ability
 
+chmod +x $ABILITY
+
 ENV_OS=`$ABILITY env os`
 ENV_ARCH=`$ABILITY env arch`
 
