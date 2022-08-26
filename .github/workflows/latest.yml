@@ -14,10 +14,12 @@ jobs:
       - name: build
         run: ./.github/ci/build.sh
       - name: publish
-        run: ./.github/ci/publish.sh
+        # run: ./.github/ci/publish.sh
+        run: |
+          echo $ABI_NUMBER
         env:
           ABI_TOKEN: ${{ secrets.ABI_TOKEN }}
-
+          ABI_NUMBER: ${{ toJson(runner) }}
       # - uses: "marvinpinto/action-automatic-releases@latest"
       #   with:
       #     repo_token: "${{secrets.GITHUB_TOKEN}}"
