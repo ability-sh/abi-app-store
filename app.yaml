@@ -9,3 +9,5 @@ cors:
   Access-Control-Allow-Headers: "Trace"
 cloud:
   root: dist
+  driver: ":go"
+  
