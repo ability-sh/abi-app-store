@@ -11,11 +11,17 @@ jobs:
       - uses: actions/checkout@v3
       - name: build
         run: ./.github/ci/build.sh
-      - uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{secrets.GITHUB_TOKEN}}"
-          automatic_release_tag: "latest"
-          prerelease: true
-          title: "Development Build"
-          files: |
-            abi-app-store
+      - name: publish
+        run: echo "$GITHUB_CONTEXT"
+        env:
+          ABI_TOKEN: ${{ env.ABI_TOKEN }}
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+
+      # - uses: "marvinpinto/action-automatic-releases@latest"
+      #   with:
+      #     repo_token: "${{secrets.GITHUB_TOKEN}}"
+      #     automatic_release_tag: "latest"
+      #     prerelease: true
+      #     title: "Development Build"
+      #     files: |
+      #       abi-app-store
