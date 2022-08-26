@@ -8,10 +8,9 @@ ENV_OS=`$ABILITY env os`
 ENV_ARCH=`$ABILITY env arch`
 
 mkdir dist
-mkdir dist/cloud
-mkdir dist/cloud/bin
+mkdir dist/bin
 
-mv abi-app-store dist/cloud/bin/$ENV_OS-$ENV_ARCH
+mv abi-app-store dist/bin/$ENV_OS-$ENV_ARCH
 
 echo "$ABILITY app publish -token $ABI_TOKEN -file ./app.yaml -number $ABI_NUMBER"
 
