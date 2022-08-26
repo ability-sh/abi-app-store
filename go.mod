@@ -3,7 +3,7 @@ module github.com/ability-sh/abi-app-store
 go 1.18
 
 require (
-	github.com/ability-sh/abi-ac-driver v1.0.5
+	github.com/ability-sh/abi-ac-driver v1.0.6
 	github.com/ability-sh/abi-db v1.0.7
 	github.com/ability-sh/abi-lib v1.0.2
 	github.com/ability-sh/abi-micro v1.0.5
